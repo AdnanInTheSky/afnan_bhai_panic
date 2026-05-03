@@ -2,12 +2,7 @@ const mongoose = require('mongoose');
 
 const orderSchema = new mongoose.Schema({
   invoiceNumber: { type: String, required: true, unique: true, index: true },
-  status: {
-    type: String,
-    enum: ['pending', 'paid', 'failed', 'shipped'],
-    default: 'pending',
-    index: true
-  },
+  status: { type: String, enum: ['pending', 'paid', 'failed', 'shipped'], default: 'pending', index: true },
   items: [{
     productId: { type: String, required: true },
     name: { type: String, required: true },
@@ -20,8 +15,14 @@ const orderSchema = new mongoose.Schema({
   customerEmail: { type: String, required: true },
   customerPhone: { type: String, required: true },
   customerAddress: { type: String, required: true },
-  gatewayTransactionId: { type: String },
-  createdAt: { type: Date, default: Date.now }
-});
+  gatewayTransactionId: String,
+  paymentMethod: String,
+  webhookMetadata: {
+    statusCode: String,
+    trxStatus: String,
+    processedAt: String,
+    ip: String
+  }
+}, { timestamps: true });
 
 module.exports = mongoose.model('Order', orderSchema);

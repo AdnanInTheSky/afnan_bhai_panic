@@ -1,8 +1,11 @@
 const requireAuth = (req, res, next) => {
-  if (req.session && req.session.isAdmin) {
-    return next();
-  }
-  return res.status(401).json({ success: false, message: 'Unauthorized. Please login.' });
+  if (req.session && req.session.isAdmin) return next();
+  return res.status(401).json({ success: false, message: 'Authentication required' });
 };
 
-module.exports = { requireAuth };
+const requireAdmin = (req, res, next) => {
+  if (req.session.role === 'admin') return next();
+  return res.status(403).json({ success: false, message: 'Admin privileges required' });
+};
+
+module.exports = { requireAuth, requireAdmin };

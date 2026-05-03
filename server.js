@@ -1,56 +1,58 @@
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
-const session = require('express-session');
+const morgan = require('morgan');
 const path = require('path');
 const connectDB = require('./config/database');
+const applySecurity = require('./middleware/security');
+const logger = require('./utils/logger');
 
 const app = express();
 
-// --- Security & Parsing Middleware ---
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
-}));
-
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// --- Session Configuration for Admin Panel ---
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'fallback_secret_change_me',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    sameSite: 'strict',
-    maxAge: 1000 * 60 * 60 * 2 // 2 hours
-  }
-}));
-
-// --- Static Frontend Serving ---
-app.use(express.static(path.join(__dirname, '../frontend')));
-
-// --- Database Connection ---
+// Connect Database
 connectDB();
 
-// --- API Routes ---
-app.use('/api/orders', require('./routes/orders'));
+// Apply Security Middleware (CORS, Helmet, Sessions, Rate Limit)
+applySecurity(app);
+
+// HTTP Logging
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+
+// 🔒 MOUNT WEBHOOK ROUTES BEFORE JSON PARSER TO PRESERVE RAW BODY
 app.use('/api/webhooks', require('./routes/webhooks'));
+
+// Standard Body Parsing (applies to all routes EXCEPT webhooks)
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+
+// Static Frontend Serving
+app.use(express.static(path.join(__dirname, '../frontend'), {
+  maxAge: '1d',
+  etag: true,
+  lastModified: true
+}));
+
+// API Routes
+app.use('/api/orders', require('./routes/orders'));
 app.use('/api/admin', require('./routes/admin'));
 
-// --- Health Check ---
+// Health Check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
-// --- Catch-all for SPA Routing ---
+// SPA Fallback
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
-// --- Start Server ---
+// Global Error Handler
+app.use((err, req, res, next) => {
+  logger.error('Unhandled error', err);
+  const statusCode = err.statusCode || 500;
+  const message = process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message;
+  res.status(statusCode).json({ success: false, message });
+});
+
+// Start Server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(` Server running on http://localhost:${PORT}`);
-  console.log(`📦 Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info(`Server running on port ${PORT}`, { env: process.env.NODE_ENV });
 });
